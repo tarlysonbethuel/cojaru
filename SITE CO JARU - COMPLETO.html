@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Casa de Oração - Jaru/RO</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <style>
+        /* --- 1. CONFIGURAÇÕES GERAIS --- */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        html { scroll-behavior: smooth; }
+        
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background-color: #231F20;
+            color: #F9F5EF;
+            overflow-x: hidden;
+            width: 100%;
+        }
+
+        /* --- 2. GERENCIADOR DE FUNDOS FIXOS --- */
+        #gerenciador-fundos {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100vh;
+            z-index: 0; pointer-events: none;
+        }
+
+        .fundo-capa {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-image: url('igreja.jpg');
+            background-size: cover; background-position: center bottom;
+            animation: zoomLento 30s ease-in-out infinite alternate;
+            opacity: 1; transition: opacity 0.8s;
+        }
+        @keyframes zoomLento { 0% { transform: scale(1); } 100% { transform: scale(1.10); } }
+
+        #canvas-liquido {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            opacity: 0.5; mix-blend-mode: screen;
+        }
+
+        .camada-fundo {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-size: cover; background-position: center;
+            opacity: 0; 
+            transition: opacity 1.2s ease-in-out, transform 15s linear;
+            transform: scale(1);
+        }
+        .camada-fundo.ativo { opacity: 1; transform: scale(1.10); }
+
+        .sombra-global {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to right, rgba(35, 31, 32, 0.95) 0%, rgba(83, 44, 17, 0.4) 50%, rgba(35, 31, 32, 0.1) 100%);
+            z-index: 1; opacity: 0; transition: opacity 1s; pointer-events: none;
+        }
+        .sombra-global.visivel { opacity: 1; }
+
+        /* --- 3. MENU SPLIT --- */
+        .menu-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: #1a1a1a;
+            z-index: 5000;
+            display: flex; 
+            transform: translateY(-100%); 
+            transition: transform 0.6s cubic-bezier(0.77, 0, 0.175, 1);
+        }
+        .menu-overlay.aberto { transform: translateY(0%); }
+
+        .menu-lado-imagem {
+            width: 50%; height: 100%; position: relative; overflow: hidden;
+            border-right: 1px solid rgba(255,255,255,0.1); background: #000;
+        }
+        .menu-bg-img {
+            width: 100%; height: 100%; background-size: cover; background-position: center;
+            opacity: 0.6; transition: background-image 0.4s ease-in-out; transform: scale(1);
+        }
+        .menu-bg-img.animar { animation: zoomMenu 10s ease-out forwards; }
+        @keyframes zoomMenu { 0% { transform: scale(1); } 100% { transform: scale(1.15); } }
+
+        .menu-lado-texto {
+            width: 50%; height: 100%; display: flex; flex-direction: column;
+            justify-content: center; align-items: flex-end; padding-right: 10%;
+            background-color: #111; position: relative;
+        }
+        .btn-fechar-menu {
+            position: absolute; top: 40px; right: 40px; background: none; border: none; 
+            color: #F9F5EF; font-size: 1rem; cursor: pointer; text-transform: uppercase; 
+            letter-spacing: 2px; transition: 0.3s;
+        }
+        .btn-fechar-menu:hover { color: #D0920D; }
+
+        .menu-lista { list-style: none; text-align: right; }
+        .menu-lista li { margin: 10px 0; overflow: hidden; }
+        .menu-link {
+            display: block; font-family: 'Playfair Display', serif; font-style: italic;
+            font-size: clamp(2rem, 3.5vw, 4rem); color: #555; text-decoration: none;
+            transition: 0.4s; transform: translateY(100%); opacity: 0;
+        }
+        .menu-link:hover { color: #F9F5EF; transform: translateX(-20px); }
+        .menu-link span { color: #D0920D; opacity: 0; transition: 0.3s; font-size: 1rem; margin-right: 10px; font-family: 'Montserrat', sans-serif; text-transform: uppercase; }
+        .menu-link:hover span { opacity: 1; }
+
+        .menu-overlay.aberto .menu-link { animation: subirTexto 0.6s forwards; }
+        .menu-overlay.aberto li:nth-child(1) .menu-link { animation-delay: 0.3s; }
+        .menu-overlay.aberto li:nth-child(2) .menu-link { animation-delay: 0.35s; }
+        @keyframes subirTexto { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        
+        @media (max-width: 768px) {
+            .menu-overlay { flex-direction: column-reverse; }
+            .menu-lado-imagem { width: 100%; height: 30%; }
+            .menu-lado-texto { width: 100%; height: 70%; padding-right: 0; align-items: center; }
+            .menu-lista { text-align: center; }
+        }
+
+        /* --- 4. CONTEÚDO SCROLL --- */
+        #scroll-container { position: relative; z-index: 10; width: 100%; }
+
+        .navbar {
+            position: fixed; top: 0; left: 0; width: 100%; padding: 25px 5%;
+            display: flex; justify-content: space-between; align-items: center;
+            z-index: 100; transition: 0.3s;
+        }
+        .navbar.rolagem { background: rgba(35, 31, 32, 0.95); padding: 15px 5%; box-shadow: 0 5px 20px rgba(0,0,0,0.5); }
+        .nav-logo { width: 45px; cursor: pointer; transition: 0.3s; }
+        .nav-logo:hover { transform: scale(1.1); }
+        .nav-btn-menu {
+            background: transparent; border: 2px solid #F9F5EF; color: #F9F5EF;
+            padding: 8px 20px; border-radius: 50px; cursor: pointer;
+            font-weight: 800; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 1px;
+            transition: 0.3s; display: flex; align-items: center; gap: 10px;
+        }
+        .nav-btn-menu:hover { background: #D0920D; border-color: #D0920D; color: #000; }
+        .hamburger span { display: block; width: 18px; height: 2px; background: currentColor; margin: 3px 0; }
+
+        .hero-spacer {
+            height: 100vh;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            text-align: center; background: transparent; 
+        }
+        .logo-hero { width: clamp(250px, 50vw, 400px); margin-bottom: 20px; filter: drop-shadow(0 0 15px rgba(0,0,0,0.5)); animation: flutuar 4s ease-in-out infinite; }
+        @keyframes flutuar { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+
+        .play-container { margin-bottom: 40px; cursor: pointer; display: flex; flex-direction: column; align-items: center; transition: 0.3s; pointer-events: auto; }
+        .play-btn { width: 70px; height: 70px; border: 2px solid #D0920D; border-radius: 50%; display: flex; justify-content: center; align-items: center; background: rgba(0,0,0,0.4); position: relative; }
+        .play-triangulo { width: 0; height: 0; border-top: 10px solid transparent; border-bottom: 10px solid transparent; border-left: 18px solid #F9F5EF; margin-left: 5px; }
+        .play-texto { margin-top: 10px; color: #D0920D; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; font-size: 0.8rem; }
+        .play-container:hover { transform: scale(1.1); } .play-container:hover .play-btn { background: #D0920D; } .play-container:hover .play-triangulo { border-left-color: #000; }
+
+        .btn-descer { color: #fff; text-decoration: none; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 2px; opacity: 0.8; display: flex; flex-direction: column; align-items: center; gap: 5px; pointer-events: auto; }
+        .seta { width: 12px; height: 12px; border-right: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(45deg); animation: setaAnim 1.5s infinite; }
+        @keyframes setaAnim { 0% { transform: translateY(0) rotate(45deg); } 50% { transform: translateY(5px) rotate(45deg); } 100% { transform: translateY(0) rotate(45deg); } }
+
+        .intro-curtain {
+            background-color: rgba(35, 31, 32, 0.95);
+            min-height: 100vh; display: flex; flex-direction: column; justify-content: center;
+            padding: 80px 10%; position: relative; box-shadow: 0 -50px 100px rgba(0,0,0,1);
+        }
+        .intro-titulo { font-family: 'Playfair Display', serif; font-size: clamp(2.5rem, 5vw, 4rem); color: #D0920D; margin-bottom: 30px; line-height: 1.1; }
+        .intro-texto-bloco { max-width: 800px; columns: 1; }
+        @media(min-width: 768px) { .intro-texto-bloco { columns: 2; gap: 40px; } }
+        .intro-texto-bloco p { margin-bottom: 20px; font-size: 1rem; line-height: 1.6; color: #e0e0e0; text-align: justify; }
+        .destaque-citacao { margin-top: 30px; font-family: 'Playfair Display', serif; font-style: italic; font-size: 1.4rem; color: #D0920D; text-align: center; border-top: 1px solid #D0920D; padding-top: 20px; }
+
+        .secao-historia {
+            min-height: 100vh; display: flex; align-items: center;
+            padding: 0 10%; margin-left: 5%;
+            border-left: 1px solid rgba(208, 146, 13, 0.3);
+        }
+        .caixa-texto {
+            max-width: 550px; padding: 30px; background: rgba(35, 31, 32, 0.8);
+            border-left: 4px solid #D0920D; backdrop-filter: blur(8px);
+            border-radius: 0 10px 10px 0; opacity: 0; transform: translateY(60px); transition: all 1s ease-out;
+        }
+        .secao-historia.visivel .caixa-texto { opacity: 1; transform: translateY(0); }
+
+        .ano-badge { background: #D0920D; color: #231F20; font-weight: 700; padding: 4px 12px; border-radius: 4px; text-transform: uppercase; display: inline-block; margin-bottom: 10px; }
+        .titulo-decada { font-family: 'Playfair Display', serif; font-size: 2.5rem; color: #F9F5EF; margin: 0 0 15px 0; }
+        
+        .btn-fotos {
+            display: inline-block; margin-top: 20px; padding: 10px 25px;
+            border: 1px solid #D0920D; color: #D0920D; background: transparent; 
+            text-transform: uppercase; font-weight: bold; font-size: 0.9rem; transition: 0.3s;
+            cursor: pointer;
+        }
+        .btn-fotos:hover { background: #D0920D; color: #231F20; box-shadow: 0 0 15px rgba(208, 146, 13, 0.4); }
+
+        .rodape-final {
+            background-color: #F9F5EF; color: #231F20; padding: 50px 5%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 30px; position: relative; z-index: 20;
+        }
+        @media(min-width: 768px) { .rodape-final { flex-direction: row; justify-content: space-between; } }
+        .logo-final { width: 180px; opacity: 1; }
+        .btn-site-igreja {
+            padding: 15px 30px; background-color: #231F20; color: #F9F5EF;
+            text-decoration: none; font-weight: 800; text-transform: uppercase;
+            border-radius: 4px; transition: 0.3s; border: 2px solid #231F20;
+        }
+        .btn-site-igreja:hover { background-color: transparent; color: #231F20; }
+
+        /* --- MODAL UNIVERSAL (VÍDEO E DRIVE) --- */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 6000; justify-content: center; align-items: center; }
+        .modal.aberto { display: flex; }
+        .modal-conteudo { width: 90%; max-width: 1200px; height: 80%; border: 1px solid #333; position: relative; background: #000; }
+        .btn-fechar-modal { position: absolute; top: -45px; right: 0; background: none; border: none; color: white; font-size: 2rem; cursor: pointer; transition: 0.3s; }
+        .btn-fechar-modal:hover { color: #D0920D; }
+        iframe { width: 100%; height: 100%; border: none; }
+
+    </style>
+</head>
+<body>
+
+    <div id="gerenciador-fundos">
+        <div class="fundo-capa" id="bg-capa"><div id="canvas-liquido"></div></div>
+        <div class="camada-fundo" id="bg-80" style="background-image: url('foto_80s.png');"></div>
+        <div class="camada-fundo" id="bg-90" style="background-image: url('foto_90s.png');"></div>
+        <div class="camada-fundo" id="bg-00" style="background-image: url('foto_00s.png');"></div>
+        <div class="camada-fundo" id="bg-10" style="background-image: url('foto_10s.jpg');"></div>
+        <div class="camada-fundo" id="bg-20" style="background-image: url('foto_20s.jpg');"></div>
+        <div class="sombra-global"></div>
+    </div>
+
+    <div class="menu-overlay" id="menu-overlay">
+        <div class="menu-lado-imagem"><div class="menu-bg-img" id="menu-bg-alvo" style="background-image: url('igreja.jpg');"></div></div>
+        <div class="menu-lado-texto">
+            <button class="btn-fechar-menu" onclick="toggleMenu()">Fechar ✕</button>
+            <ul class="menu-lista">
+                <li><a href="#intro" class="menu-link" onclick="toggleMenu()" onmouseenter="mudarBgMenu('igreja.jpg')"><span>01</span> Nossa História</a></li>
+                <li><a href="#anos-80" class="menu-link" onclick="toggleMenu()" onmouseenter="mudarBgMenu('foto_80s.png')"><span>02</span> Anos 80</a></li>
+                <li><a href="#anos-90" class="menu-link" onclick="toggleMenu()" onmouseenter="mudarBgMenu('foto_90s.png')"><span>03</span> Anos 90</a></li>
+                <li><a href="#anos-00" class="menu-link" onclick="toggleMenu()" onmouseenter="mudarBgMenu('foto_00s.png')"><span>04</span> Anos 2000</a></li>
+                <li><a href="#anos-10" class="menu-link" onclick="toggleMenu()" onmouseenter="mudarBgMenu('foto_10s.jpg')"><span>05</span> Anos 2010</a></li>
+                <li><a href="#anos-20" class="menu-link" onclick="toggleMenu()" onmouseenter="mudarBgMenu('foto_20s.jpg')"><span>06</span> Anos 2020</a></li>
+                <li style="margin-top: 30px;">
+                    <a href="https://igrejacasadeoracaorondonia.com.br" target="_blank" class="menu-link" onmouseenter="mudarBgMenu('LOGO-CO-RO.png')" style="font-size: 1.5rem; opacity: 1; color: #D0920D;">Visitar Site Oficial ↗</a>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <nav class="navbar">
+        <img src="Logo Casa De Oração - Jaru - Simplificada.png" class="nav-logo" onclick="window.scrollTo(0,0)" alt="Home">
+        <button class="nav-btn-menu" onclick="toggleMenu()">MENU <div class="hamburger"><span></span><span></span><span></span></div></button>
+    </nav>
+
+    <div id="scroll-container">
+
+        <section class="hero-spacer">
+            <span class="subtitulo" style="color: #D0920D; font-weight: 700;">Sejam bem-vindos à</span>
+            <img src="Logo Casa De Oração - Jaru.png" class="logo-hero">
+            <div class="play-container" onclick="abrirVideo()">
+                <div class="play-btn"><div class="play-triangulo"></div></div>
+                <span class="play-texto">Assistir História</span>
+            </div>
+            <a href="#intro" class="btn-descer">Conheça Nossa História<div class="seta"></div></a>
+        </section>
+
+        <div class="intro-curtain" id="intro">
+            <h1 class="intro-titulo">Nossa História:<br>41 Anos de Fé</h1>
+            <div class="intro-texto-bloco">
+                <p><strong>A Igreja Cristã Evangélica Casa de Oração de Jaru</strong> celebra quatro décadas de uma trajetória marcada pela dedicação à Palavra de Deus e pelo amor ao próximo.</p>
+                <p><strong>O Início:</strong> Nossas raízes remontam à simplicidade do Evangelho e chegaram a Jaru no início da década de 70. As primeiras reuniões começaram em 1973.</p>
+                <p><strong>Crescimento:</strong> Oficialmente emancipada entre 1983 e 1984, a nossa congregação floresceu através do esforço de pioneiros.</p>
+                <p><strong>Missão:</strong> Continuamos firmes no propósito de ser luz no mundo, servindo à comunidade de Jaru com amor.</p>
+            </div>
+            <div class="destaque-citacao">“O coração da igreja está em cada um de nós que escolhe seguir a Cristo.”</div>
+            <p style="text-align: center; margin-top: 20px; color: #888;">↓ Role para viajar no tempo ↓</p>
+        </div>
+
+        <section class="secao-historia" id="anos-80" data-img="bg-80">
+            <div class="caixa-texto">
+                <span class="ano-badge">Anos 80</span>
+                <h2 class="titulo-decada">Fundação e Raízes</h2>
+                <p>A década da consolidação. Após a emancipação, a igreja firmou seus passos em solo rondoniense. Foram tempos de fé pura na pequena estrutura de madeira.</p>
+                
+                <button class="btn-fotos" onclick="abrirGaleria('1VJQ84L8ZSzty-7lGFIUeaeWF96TdPJIP')">Ver Fotos Anos 80</button>
+            </div>
+        </section>
+
+        <section class="secao-historia" id="anos-90" data-img="bg-90">
+            <div class="caixa-texto">
+                <span class="ano-badge">Anos 90</span>
+                <h2 class="titulo-decada">Águas de Batismo</h2>
+                <p>O crescimento se tornou visível. Foi uma era marcada pelos grandes batismos nos rios da região e reuniões memoráveis nos sítios.</p>
+                <button class="btn-fotos" onclick="abrirGaleria('1F-CGHQ3I-oIUdZT7qnAKbHXuCz_XY7km')">Ver Fotos Anos 90</button>
+            </div>
+        </section>
+
+        <section class="secao-historia" id="anos-00" data-img="bg-00">
+            <div class="caixa-texto">
+                <span class="ano-badge">Anos 2000</span>
+                <h2 class="titulo-decada">Um Novo Templo</h2>
+                <p>O ano 2000 marcou o início de um sonho tangível: a construção do nosso templo atual. Deixamos a madeira para erguer, tijolo por tijolo.</p>
+                <button class="btn-fotos" onclick="abrirGaleria('1CsyZJsx4jzE5e2ozWHGCKP6YNdd39miW')">Ver Fotos Anos 2000</button>
+            </div>
+        </section>
+
+        <section class="secao-historia" id="anos-10" data-img="bg-10">
+            <div class="caixa-texto">
+                <span class="ano-badge">Anos 2010</span>
+                <h2 class="titulo-decada">Fortalecendo Laços</h2>
+                <p>Com o templo estabelecido, o foco se voltou para o cuidado. Ministérios se fortaleceram e o louvor ganhou novos tons.</p>
+                <button class="btn-fotos" onclick="abrirGaleria('15t4coolOcOTn-q3j2-x4_A5f5mbjXEFN')">Ver Fotos Anos 2010</button>
+            </div>
+        </section>
+
+        <section class="secao-historia" id="anos-20" data-img="bg-20">
+            <div class="caixa-texto">
+                <span class="ano-badge">Anos 2020</span>
+                <h2 class="titulo-decada">O Futuro é Agora</h2>
+                <p>Entramos em uma nova era. Projetos como o "Acampamento Raízes" mostram uma igreja viva, que investe na juventude.</p>
+                <button class="btn-fotos" onclick="abrirGaleria('14VURY-TcredphtcfNydLRAWcoVElvjNC')">Ver Fotos Atuais</button>
+            </div>
+        </section>
+
+        <footer class="rodape-final">
+            <img src="Logo Casa De Oração - Jaru - Simplificada - 2.png" alt="Logo Final" class="logo-final">
+            <a href="https://igrejacasadeoracaorondonia.com.br" target="_blank" class="btn-site-igreja">Visitar Site Oficial</a>
+        </footer>
+    </div>
+
+
+    <div id="modal-universal" class="modal" onclick="fecharModal()">
+        <div class="modal-conteudo" onclick="event.stopPropagation()">
+            <button class="btn-fechar-modal" onclick="fecharModal()">✕</button>
+            <iframe id="iframe-conteudo" src="" allow="autoplay" allowfullscreen></iframe>
+        </div>
+    </div>
+
+
+    <script>
+        // 1. MENU
+        function toggleMenu() { document.getElementById('menu-overlay').classList.toggle('aberto'); }
+        function mudarBgMenu(img) {
+            const el = document.getElementById('menu-bg-alvo');
+            el.classList.remove('animar');
+            void el.offsetWidth;
+            el.style.backgroundImage = `url('${img}')`;
+            el.classList.add('animar');
+        }
+
+        // 2. MODAL UNIVERSAL (VÍDEO E GOOGLE DRIVE)
+        const modal = document.getElementById('modal-universal');
+        const iframe = document.getElementById('iframe-conteudo');
+
+        // Abre Vídeo
+        function abrirVideo() { 
+            modal.classList.add('aberto'); 
+            iframe.src = "https://www.youtube.com/embed/ADcSBEr_cBE?autoplay=1&start=207"; 
+        }
+
+        // Abre Galeria do Drive (Modo Grid Embed)
+        function abrirGaleria(folderId) {
+            modal.classList.add('aberto');
+            // URL mágica para embedar pastas em modo grade
+            iframe.src = `https://drive.google.com/embeddedfolderview?id=${folderId}#grid`;
+        }
+
+        function fecharModal() { 
+            modal.classList.remove('aberto'); 
+            iframe.src = ""; // Para o vídeo/reseta
+        }
+        document.addEventListener('keydown', (e) => { if(e.key === "Escape") fecharModal(); });
+
+        // 3. NAVBAR
+        const navbar = document.querySelector('.navbar');
+        window.addEventListener('scroll', () => { navbar.classList.toggle('rolagem', window.scrollY > 50); });
+
+        // 4. SCROLLYTELLING (FUNDOS)
+        const fundos = document.querySelectorAll('.camada-fundo');
+        const secoes = document.querySelectorAll('.secao-historia');
+        const capa = document.getElementById('bg-capa');
+        const sombra = document.querySelector('.sombra-global');
+        const intro = document.querySelector('.intro-curtain');
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if(entry.isIntersecting) {
+                    entry.target.classList.add('visivel');
+                    const id = entry.target.getAttribute('data-img');
+                    if(id) {
+                        fundos.forEach(bg => bg.classList.remove('ativo'));
+                        const bgAtivo = document.getElementById(id);
+                        if(bgAtivo) bgAtivo.classList.add('ativo');
+                        capa.style.opacity = '0';
+                        sombra.classList.add('visivel');
+                    }
+                }
+            });
+        }, { threshold: 0.4 });
+        secoes.forEach(s => observer.observe(s));
+
+        const introObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if(entry.isIntersecting) {
+                    fundos.forEach(bg => bg.classList.remove('ativo'));
+                    sombra.classList.remove('visivel');
+                    capa.style.opacity = '1'; 
+                }
+            });
+        }, { threshold: 0.1 });
+        introObserver.observe(intro);
+
+        // 5. THREE.JS
+        let scene, camera, renderer, material;
+        const container = document.getElementById('canvas-liquido');
+        let mouse = new THREE.Vector2(0.5, 0.5);
+        let target = new THREE.Vector2(0.5, 0.5);
+
+        function init3D() {
+            if(!container) return;
+            scene = new THREE.Scene();
+            camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+            renderer = new THREE.WebGLRenderer({ alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            container.appendChild(renderer.domElement);
+            const geometry = new THREE.PlaneGeometry(2, 2);
+            
+            const fragment = `
+                uniform float time; uniform vec2 res; uniform vec2 mouse;
+                vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+                vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+                vec3 permute(vec3 x) { return mod289(((x*34.0)+1.0)*x); }
+                float snoise(vec2 v) {
+                    const vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
+                    vec2 i  = floor(v + dot(v, C.yy) ); vec2 x0 = v -   i + dot(i, C.xx);
+                    vec2 i1; i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+                    vec4 x12 = x0.xyxy + C.xxzz; x12.xy -= i1;
+                    i = mod289(i);
+                    vec3 p = permute( permute( i.y + vec3(0.0, i1.y, 1.0 )) + i.x + vec3(0.0, i1.x, 1.0 ));
+                    vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
+                    m = m*m ; m = m*m ;
+                    vec3 x = 2.0 * fract(p * C.www) - 1.0; vec3 h = abs(x) - 0.5;
+                    vec3 ox = floor(x + 0.5); vec3 a0 = x - ox;
+                    m *= 1.79284291400159 - 0.85373472095314 * ( a0*a0 + h*h );
+                    vec3 g; g.x  = a0.x  * x0.x  + h.x  * x0.y; g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+                    return 130.0 * dot(m, g);
+                }
+                void main() {
+                    vec2 st = gl_FragCoord.xy / res.xy;
+                    float aspect = res.x / res.y;
+                    vec2 st_ratio = st; st_ratio.x *= aspect;
+                    float dist = distance(st_ratio, vec2(mouse.x * aspect, mouse.y));
+                    float force = smoothstep(0.4, 0.0, dist) * 2.0;
+                    float n = snoise(vec2(st.x * 2.0 + time * 0.1 + force, st.y * 2.0 - time * 0.15));
+                    float n2 = snoise(vec2(st.x * 4.0 - time * 0.1, st.y * 4.0 + time * 0.1 + n));
+                    float liquid = n * 0.5 + n2 * 0.5;
+                    vec3 color = vec3(0.97, 0.96, 0.93) * 0.4;
+                    float alpha = smoothstep(0.2, 0.8, liquid + force * 0.3);
+                    gl_FragColor = vec4(color * alpha, 1.0);
+                }
+            `;
+            material = new THREE.ShaderMaterial({
+                uniforms: { time: { value: 0 }, res: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }, mouse: { value: new THREE.Vector2(0.5, 0.5) } },
+                vertexShader: `void main() { gl_Position = vec4(position, 1.0); }`,
+                fragmentShader: fragment
+            });
+            scene.add(new THREE.Mesh(geometry, material));
+            animate();
+        }
+        function animate() {
+            requestAnimationFrame(animate); material.uniforms.time.value += 0.01;
+            mouse.lerp(target, 0.1); material.uniforms.mouse.value.copy(mouse);
+            renderer.render(scene, camera);
+        }
+        window.addEventListener('resize', () => { renderer.setSize(window.innerWidth, window.innerHeight); material.uniforms.res.value.set(window.innerWidth, window.innerHeight); });
+        document.addEventListener('mousemove', (e) => { target.x = e.clientX / window.innerWidth; target.y = 1.0 - (e.clientY / window.innerHeight); });
+        init3D();
+    </script>
+</body>
+</html>
